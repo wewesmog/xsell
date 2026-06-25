@@ -1,0 +1,82 @@
+2026-06-25 15:11:44,196 - QueryStateLogger - ERROR - Missing database credentials. Set DATABASE_URL or PGHOST, PGUSER, and PGPASSWORD.
+2026-06-25 15:16:50,283 - QueryStateLogger - ERROR - Unable to connect to database: connection to server at "64.60.37.250", port 5432 failed: Operation timed out
+	Is the server running on that host and accepting TCP/IP connections?
+
+2026-06-25 15:17:37,745 - QueryStateLogger - ERROR - Unable to connect to database: connection to server at "64.20.37.250", port 5432 failed: FATAL:  password authentication failed for user "xsell_user"
+connection to server at "64.20.37.250", port 5432 failed: FATAL:  password authentication failed for user "xsell_user"
+
+2026-06-25 15:19:51,844 - QueryStateLogger - ERROR - Unable to connect to database: connection to server at "64.20.37.250", port 5432 failed: FATAL:  password authentication failed for user "xsell_user"
+connection to server at "64.20.37.250", port 5432 failed: FATAL:  password authentication failed for user "xsell_user"
+
+2026-06-25 15:20:53,208 - QueryStateLogger - ERROR - Unable to connect to database: connection to server at "64.20.37.250", port 5432 failed: FATAL:  password authentication failed for user "xsell_user"
+connection to server at "64.20.37.250", port 5432 failed: FATAL:  password authentication failed for user "xsell_user"
+
+2026-06-25 15:26:00,198 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:28:28,830 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:30:13,485 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:30:27,582 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:30:37,198 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:30:42,453 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:31:32,063 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:32:35,770 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:32:38,107 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:33:06,779 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:33:33,197 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:33:36,475 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:34:54,845 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:34:59,930 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:35:04,835 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:36:25,076 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:37:31,115 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:41:24,900 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:41:24,922 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:41:27,072 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:41:27,151 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:41:31,408 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:41:33,560 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:41:39,337 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:41:42,271 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:43:33,658 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:43:47,741 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:43:50,058 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:43:52,618 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:43:54,975 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:44:52,216 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:44:52,216 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:44:54,625 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:44:54,625 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:45:08,497 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:45:08,497 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:45:11,057 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:45:11,364 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:45:27,031 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:45:38,730 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:45:40,995 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:45:43,520 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:45:45,928 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:45:45,928 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:45:45,929 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:45:45,933 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:45:48,126 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:45:50,389 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:46:45,643 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:47:15,747 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:47:33,514 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:47:36,149 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:51:28,165 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:51:28,165 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:51:30,658 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:51:30,931 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:51:32,836 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 15:52:10,378 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 16:16:55,071 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 16:16:55,092 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 16:17:07,715 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 16:17:10,109 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 16:17:12,369 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 16:17:14,683 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 16:21:45,912 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 16:21:45,912 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 16:21:48,144 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 16:21:48,390 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user
+2026-06-25 16:21:50,337 - QueryStateLogger - INFO - Connected to PostgreSQL database xsell_db as user xsell_user

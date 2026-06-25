@@ -13,7 +13,7 @@ import pandas as pd
 
 from app.xsell_helpers.agents_main import agents_by_staff_no
 from app.xsell_helpers.broadcast_main import _resolve_schedule_dates, get_broadcast
-from app.xsell_helpers.canon_main import _get_conn
+from app.shared_services.db import get_xsell_connection as _get_conn
 from app.xsell_helpers.workbook_columns import (
     MANDATORY_DROPDOWNS,
     build_workbook_column_order,
@@ -65,20 +65,26 @@ def _export_columns(config: dict, label_map: dict[str, str]) -> list[str]:
 def _load_list_rows(list_id: str) -> pd.DataFrame:
     conn = _get_conn()
     try:
-        rows = conn.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
             SELECT msisdn_clean, customer_name, others_json
             FROM list_rows
-            WHERE list_id = ? AND is_valid = 1 AND decision = 'keep'
+            WHERE list_id = %s AND is_valid = TRUE AND decision = 'keep'
             """,
             (list_id,),
-        ).fetchall()
+        )
+        rows = cur.fetchall()
     finally:
         conn.close()
 
     records: list[dict[str, Any]] = []
     for row in rows:
-        others = json.loads(row["others_json"] or "{}")
+        raw_others = row["others_json"]
+        if isinstance(raw_others, dict):
+            others = raw_others
+        else:
+            others = json.loads(raw_others or "{}")
         record = {str(k): v for k, v in others.items()}
         record["_msisdn_clean"] = row["msisdn_clean"]
         record["_customer_name"] = row["customer_name"] or ""
@@ -105,6 +111,11 @@ def _winsorize(series: pd.Series, mode: str) -> pd.Series:
 
 def _rank_pool(df: pd.DataFrame, config: dict) -> pd.DataFrame:
     ranking = config.get("ranking") or {}
+    if ranking.get("enabled") is False:
+        out = df.copy()
+        out["_rank_score"] = 0.0
+        return out
+
     criteria = ranking.get("criteria") or []
     winsorize = str(ranking.get("winsorize") or "none")
     if df.empty or not criteria:
@@ -651,11 +662,12 @@ def generate_broadcast_files(broadcast_id: str) -> dict[str, Any]:
 
     conn = _get_conn()
     try:
-        conn.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
             UPDATE broadcasts
-            SET generated_at = ?, output_dir = ?, workbook_schema_json = ?
-            WHERE broadcast_id = ?
+            SET generated_at = %s, output_dir = %s, workbook_schema_json = %s
+            WHERE broadcast_id = %s
             """,
             (generated_at, output_dir, json.dumps(workbook_schema), broadcast_id),
         )

@@ -1,5 +1,8 @@
 """Pydantic models for campaigns and broadcasts API."""
 
+from __future__ import annotations
+
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
@@ -29,8 +32,8 @@ class CampaignSummary(BaseModel):
     description: str = ""
     status: EntityStatus = EntityStatus.active
     created_by: str
-    created_at: str
-    updated_at: str
+    created_at: datetime
+    updated_at: datetime
     broadcast_count: int = 0
 
 
@@ -65,11 +68,11 @@ class BroadcastSummary(BaseModel):
     lead_list_id: str | None = None
     pool_size: int = 0
     schedule_dates: list[str] = Field(default_factory=list)
-    generated_at: str | None = None
+    generated_at: datetime | None = None
     output_dir: str | None = None
     created_by: str
-    created_at: str
-    updated_at: str
+    created_at: datetime
+    updated_at: datetime
 
 
 class BroadcastDetail(BroadcastSummary):

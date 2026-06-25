@@ -25,18 +25,26 @@ export function RankingPreview() {
   )
 
   const description =
-    rows.length === 0
-      ? "Upload leads on step 1 to see top-ranked rows."
-      : `Top ${preview.length} leads after scoring (from file preview rows).${
-          draft.ranking.includeManagerColumns
-            ? " Workbooks will also include priority_score and rank."
-            : ""
-        }`
+    !draft.ranking.enabled
+      ? "Ranking is off — leads will stay in ingest order."
+      : rows.length === 0
+        ? "Upload leads on step 1 to see top-ranked rows."
+        : preview.length === 0
+          ? "Add ranking fields above to preview scored rows."
+          : `Top ${preview.length} leads after scoring (from file preview rows).${
+              draft.ranking.includeManagerColumns
+                ? " Workbooks will also include priority_score and rank."
+                : ""
+            }`
 
   return (
     <ScheduleSectionCard title="Ranking preview" description={description}>
-      {rows.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No preview data yet.</p>
+      {!draft.ranking.enabled ? (
+        <p className="text-muted-foreground text-sm">Weighted ranking is disabled for this run.</p>
+      ) : rows.length === 0 ? (
+        <p className="text-muted-foreground text-sm">Upload leads on step 1 to see top-ranked rows.</p>
+      ) : preview.length === 0 ? (
+        <p className="text-muted-foreground text-sm">Add ranking fields above to preview scored rows.</p>
       ) : (
         <div className="overflow-x-auto">
           <Table>

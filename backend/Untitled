@@ -1,0 +1,17 @@
+# PostgreSQL (required)
+PGHOST= 64.60.37.250
+PGPORT=5432
+PGUSER='xsell_user'
+PGPASSWORD= 'your_strong_password'
+PGDATABASE='xsell_db'
+# Optional: full URL instead of PG* vars above
+# DATABASE_URL=postgresql://user:password@host:5432/xsell
+# SSL mode: prefer (local), require (managed cloud)
+PGSSLMODE=prefer
+
+# Oracle (CONVERSIONS_FINAL exclusions — required when exclusions enabled)
+ORACLE_USER=
+ORACLE_PASSWORD=
+ORACLE_HOST=
+ORACLE_PORT=1521
+ORACLE_SERVICE=

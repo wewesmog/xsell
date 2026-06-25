@@ -24,13 +24,14 @@ export const defaultCampaignDraft = (): CampaignDraft => ({
     excludedCount: 0,
   },
   ranking: {
+    enabled: false,
     criteria: [],
     winsorize: "p5-p95",
     agentVisibleColumns: ["Mobile Number"],
     includeManagerColumns: true,
   },
   assignment: {
-    mode: "fair",
+    mode: "random",
     fairnessColumn: "",
   },
   agents: {

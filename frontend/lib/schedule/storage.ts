@@ -1,36 +1,6 @@
 import { defaultCampaignDraft } from "./defaults"
-import { STORAGE_KEY } from "./constants"
-import type { CampaignDraft, StoredDraft } from "./types"
+import type { CampaignDraft } from "./types"
 
-/** @deprecated Schedule no longer auto-restores from localStorage. */
-export function loadDraft(): StoredDraft | null {
-  if (typeof window === "undefined") return null
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as StoredDraft
-    if (!parsed?.values) return null
-    return parsed
-  } catch {
-    return null
-  }
-}
-
-/** @deprecated Schedule no longer auto-saves to localStorage. */
-export function saveDraft(currentStep: number, values: CampaignDraft) {
-  if (typeof window === "undefined") return
-  const payload: StoredDraft = {
-    savedAt: new Date().toISOString(),
-    currentStep,
-    values,
-  }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
-}
-
-export function clearDraft() {
-  if (typeof window === "undefined") return
-  localStorage.removeItem(STORAGE_KEY)
-}
 export function mergeWithDefaults(values: Partial<CampaignDraft>): CampaignDraft {
   const base = defaultCampaignDraft()
   const leads = { ...base.leads, ...values.leads }
@@ -60,6 +30,10 @@ export function mergeWithDefaults(values: Partial<CampaignDraft>): CampaignDraft
     ]
   }
 
+  const rankingEnabled =
+    ranking.enabled ?? ((ranking.criteria?.length ?? 0) > 0 ? true : base.ranking.enabled)
+  const assignmentMode = values.assignment?.mode ?? base.assignment.mode
+
   return {
     ...base,
     ...values,
@@ -72,13 +46,15 @@ export function mergeWithDefaults(values: Partial<CampaignDraft>): CampaignDraft
     },
     ranking: {
       ...ranking,
+      enabled: rankingEnabled,
       criteria: ranking.criteria ?? base.ranking.criteria,
       includeManagerColumns: ranking.includeManagerColumns ?? true,
     },
     assignment: {
       ...base.assignment,
       ...values.assignment,
-      mode: values.assignment?.mode ?? base.assignment.mode,
+      mode: rankingEnabled ? assignmentMode : "random",
+      fairnessColumn: rankingEnabled ? (values.assignment?.fairnessColumn ?? "") : "",
     },
     agents: { ...base.agents, ...values.agents },
     volume: {

@@ -1,18 +1,16 @@
+from __future__ import annotations
+
 import os
+from contextlib import contextmanager
+from typing import Any, Iterator
 
-from typing import List, Dict, Any, Optional, TypedDict, Union
 from dotenv import load_dotenv
-
 import psycopg2
-import requests
-
-from psycopg2.extras import Json, RealDictCursor
-
-import numpy as np
+from psycopg2 import errors as pg_errors
+from psycopg2.extras import RealDictCursor
 
 from .logger_setup import setup_logger
 
-# Load environment variables
 load_dotenv()
 
 logger = setup_logger()
@@ -20,40 +18,75 @@ logger = setup_logger()
 
 def get_postgres_connection(table_name: str = None):
     """
-    Establish and return a connection to the PostgreSQL database using Neon connection.
-    For direct database connections, we use the connection string from Neon Dashboard.
-    
-    :param table_name: Optional. Name of the table to interact with (not used currently)
-    :return: Connection object
+    Establish and return a connection to PostgreSQL using PG* env vars or DATABASE_URL.
     """
-    # Get Neon connection details from environment variables
-    db_host = os.getenv("PGHOST")  # Host from connection string
-    db_password = os.getenv("PGPASSWORD")  # Password from connection string
-    db_port = os.getenv("PGPORT", "5432")  # Port with default value
-    db_name = os.getenv("PGDATABASE", "xpchex")  # Default to 'neondb' for Neon
-    db_user = os.getenv("PGUSER")  # User from connection string
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        conn = psycopg2.connect(database_url)
+        logger.info("Connected to PostgreSQL via DATABASE_URL")
+        return conn
+
+    db_host = os.getenv("PGHOST")
+    db_password = os.getenv("PGPASSWORD")
+    db_port = os.getenv("PGPORT", "5432")
+    db_name = os.getenv("PGDATABASE", "xsell")
+    db_user = os.getenv("PGUSER")
+    sslmode = os.getenv("PGSSLMODE", "prefer")
 
     if not all([db_host, db_password, db_user]):
-        error_msg = "Missing required database credentials in environment variables"
+        error_msg = (
+            "Missing database credentials. Set DATABASE_URL or PGHOST, PGUSER, and PGPASSWORD."
+        )
         logger.error(error_msg)
         raise ValueError(error_msg)
 
     try:
-        # Direct PostgreSQL connection to Neon database
         conn = psycopg2.connect(
             host=db_host,
             database=db_name,
             user=db_user,
             password=db_password,
             port=db_port,
-            sslmode='require'  # Neon requires SSL
+            sslmode=sslmode,
         )
-        logger.info(f"Successfully connected to Neon database: {db_name} as user {db_user}")
+        logger.info("Connected to PostgreSQL database %s as user %s", db_name, db_user)
         return conn
-    except psycopg2.OperationalError as e:
-        logger.error(f"Unable to connect to database. Error: {e}")
-        raise
-    except Exception as e:
-        logger.error(f"An unexpected error occurred while connecting to Neon: {e}")
+    except psycopg2.OperationalError as exc:
+        logger.error("Unable to connect to database: %s", exc)
         raise
 
+
+def get_xsell_connection():
+    """PostgreSQL connection for xsell app data (dict rows like sqlite3.Row)."""
+    conn = get_postgres_connection()
+    conn.cursor_factory = RealDictCursor
+    return conn
+
+
+def _get_conn():
+    """Alias used by xsell_helpers."""
+    return get_xsell_connection()
+
+
+def is_unique_violation(exc: BaseException) -> bool:
+    return isinstance(exc, pg_errors.UniqueViolation)
+
+
+def is_undefined_table(exc: BaseException) -> bool:
+    return isinstance(exc, pg_errors.UndefinedTable)
+
+
+@contextmanager
+def xsell_cursor(*, commit: bool = False) -> Iterator[Any]:
+    conn = get_xsell_connection()
+    cur = conn.cursor()
+    try:
+        yield cur
+        if commit:
+            conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+        conn.close()

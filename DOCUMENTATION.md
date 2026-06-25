@@ -8,7 +8,7 @@ Frontend API base: `NEXT_PUBLIC_XSELL_API_BASE_URL` (default `http://localhost:8
 ## E2E flow
 
 ```
-Upload file → Clean → Approve list (SQLite)
+Upload file → Clean → Approve list (PostgreSQL)
     → Schedule wizard (8 steps) → Save broadcast (config_json)
     → POST /api/broadcasts/{id}/generate
     → Excel workbooks under backend/data/outputs/{broadcast_id}/
@@ -16,7 +16,7 @@ Upload file → Clean → Approve list (SQLite)
 
 | Step | Action | API / script |
 |------|--------|----------------|
-| 0 | Apply DB migrations | `python scripts/apply_migration.py` |
+| 0 | Apply DB migrations | `python scripts/apply_migration.py` (also runs on API startup) |
 | 1 | Upload + map columns | `POST /api/lists/preview`, `POST /api/lists/upload` |
 | 2 | Dedupe / validate MSISDN | `POST /api/lists/{id}/clean` |
 | 3 | Approve for campaigns | `POST /api/lists/{id}/approve` |
@@ -94,25 +94,27 @@ Stored on `broadcasts.config_json` and mirrored in the frontend Zod schema (`fro
 
 ### Schedule wizard behaviour
 
-- **No auto-save** of draft to `localStorage` (fresh wizard on new schedule; edit via `?broadcastId=`).
+- **No auto-save** of draft to `localStorage` (fresh wizard on new schedule; edit via `?broadcastId=`). Drafts persist in PostgreSQL on `broadcasts.config_json`.
 - **Assign step** copy and preview are driven by form values (mode, fairness column, quota, phone column, agents, dates).
 - **Review / generate** validates all steps including roster absences (`validateForGenerate(draft, roster)`).
 - Capacity warnings use **eligible agent-day slots** (active + not absent), not raw agent count.
 
 ---
 
-## SQLite tables (`backend/xsell.db`)
+## PostgreSQL tables
+
+Connection via `backend/app/shared_services/db.py` using `DATABASE_URL` or `PGHOST` / `PGUSER` / `PGPASSWORD` / `PGDATABASE` (default `xsell`). Schema is created idempotently by `backend/migrations/*.sql` (run `python scripts/apply_migration.py` or start the API).
 
 | Table | Purpose |
 |-------|---------|
 | `schema_migrations` | Applied migration filenames |
 | `lists` | Ingested list metadata (`processing` / `ready` / `archived`) |
-| `list_rows` | Normalized rows per list (`msisdn_clean`, `others_json`, `decision`) |
+| `list_rows` | Normalized rows per list (`msisdn_clean`, `others_json` JSONB, `decision`) |
 | `campaigns` | Parent program container |
-| `broadcasts` | One schedule run; `config_json`, `lead_list_id`, `pool_size`, `generated_at`, `output_dir`, `workbook_schema_json` |
+| `broadcasts` | One schedule run; `config_json` JSONB, `lead_list_id`, `pool_size`, `generated_at`, `output_dir`, `workbook_schema_json` JSONB |
 | `agents` | Outbound staff master (`staff_no`, `active`) |
 | `roster_absences` | Per-day absences (`staff_no`, `absent_date`) |
-| `broadcast_responses` | Per-lead response rows (JSON); seeded on generate |
+| `broadcast_responses` | Per-lead response rows (JSONB); seeded on generate |
 
 **Staged uploads (disk, not DB):** `backend/data/uploads/{list_id}.*`, `.mapping.json`, `.meta.json`
 
@@ -140,7 +142,7 @@ Prefix: `/api` unless noted.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/health` | Status, `db_path`, `oracle_configured` |
+| GET | `/health` | Status, `database` name, `oracle_configured` |
 
 ### Lists (`list_ingestion.py`)
 
@@ -284,10 +286,24 @@ Prefix: `/api` unless noted.
 | `app/xsell_helpers/file_ingest.py` | CSV, TSV, TXT, DAT, XLSX, XLS reader |
 | `app/xsell_helpers/broadcast_generate.py` | Rank, assign, Excel output |
 | `app/xsell_helpers/oracle_exclusions.py` | Oracle exclusion query + preview |
+| `app/shared_services/db.py` | PostgreSQL connection (`get_xsell_connection`) |
 | `app/shared_services/oracle_db.py` | Central Oracle connection |
-| `migrations/*.sql` | Schema (run via `scripts/apply_migration.py`) |
+| `migrations/*.sql` | PostgreSQL schema (idempotent; run via `scripts/apply_migration.py`) |
 | `scripts/e2e_list_to_excel.py` | End-to-end CLI test |
 | `scripts/generate_broadcast.py` | Generate-only CLI |
+
+---
+
+## Database setup
+
+Copy `backend/.env.example` to `backend/.env` and set PostgreSQL credentials.
+
+```bash
+cd backend
+python scripts/apply_migration.py
+```
+
+Migrations are idempotent (`CREATE TABLE IF NOT EXISTS`). The API also runs pending migrations on startup.
 
 ---
 

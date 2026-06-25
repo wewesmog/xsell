@@ -1,48 +1,84 @@
-"""Apply pending SQL migrations in backend/migrations/ to backend/xsell.db."""
+"""Apply pending SQL migrations in backend/migrations/ to PostgreSQL."""
 
+from __future__ import annotations
+
+import sys
 from pathlib import Path
 
-import sqlite3
-
 BASE_DIR = Path(__file__).resolve().parents[1]
-DB_PATH = BASE_DIR / "xsell.db"
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+from app.shared_services.db import get_xsell_connection  # noqa: E402
+
 MIGRATIONS_DIR = BASE_DIR / "migrations"
 
 
-def _ensure_migrations_table(conn: sqlite3.Connection) -> None:
-    conn.execute(
+def _strip_leading_sql_comments(statement: str) -> str:
+    """Remove leading blank/comment lines so header comments don't skip real SQL."""
+    lines: list[str] = []
+    for line in statement.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("--"):
+            continue
+        lines.append(line)
+    return "\n".join(lines).strip()
+
+
+def _split_sql_statements(sql: str) -> list[str]:
+    """Split SQL script into executable statements (handles $$ plpgsql blocks)."""
+    statements: list[str] = []
+    current: list[str] = []
+    in_dollar = False
+
+    for line in sql.splitlines():
+        if "$$" in line:
+            count = line.count("$$")
+            if count % 2 == 1:
+                in_dollar = not in_dollar
+
+        current.append(line)
+        if not in_dollar and line.rstrip().endswith(";"):
+            statement = _strip_leading_sql_comments("\n".join(current))
+            if statement:
+                statements.append(statement)
+            current = []
+
+    trailing = _strip_leading_sql_comments("\n".join(current))
+    if trailing:
+        statements.append(trailing)
+    return statements
+
+
+def _ensure_migrations_table(cur) -> None:
+    cur.execute(
         """
         CREATE TABLE IF NOT EXISTS schema_migrations (
             filename TEXT PRIMARY KEY,
-            applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+            applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
         """
     )
 
 
-def _is_applied(conn: sqlite3.Connection, filename: str) -> bool:
-    row = conn.execute(
-        "SELECT 1 FROM schema_migrations WHERE filename = ?",
+def _is_applied(cur, filename: str) -> bool:
+    cur.execute(
+        "SELECT 1 FROM schema_migrations WHERE filename = %s",
         (filename,),
-    ).fetchone()
-    return row is not None
+    )
+    return cur.fetchone() is not None
 
 
-def _mark_applied(conn: sqlite3.Connection, filename: str) -> None:
-    conn.execute(
-        "INSERT INTO schema_migrations (filename) VALUES (?)",
+def _mark_applied(cur, filename: str) -> None:
+    cur.execute(
+        "INSERT INTO schema_migrations (filename) VALUES (%s)",
         (filename,),
     )
 
 
-def _bootstrap_legacy_migrations(conn: sqlite3.Connection) -> None:
-    """If lists already exist from a prior manual 001 run, don't re-apply it."""
-    lists = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='lists'"
-    ).fetchone()
-    if lists and not _is_applied(conn, "001_list_ingestion_schema.sql"):
-        _mark_applied(conn, "001_list_ingestion_schema.sql")
-        print("Marked 001_list_ingestion_schema.sql as applied (lists table already exists)")
+def _run_sql_script(cur, sql: str) -> None:
+    for statement in _split_sql_statements(sql):
+        cur.execute(statement)
 
 
 def main() -> None:
@@ -50,28 +86,43 @@ def main() -> None:
     if not files:
         raise SystemExit(f"No migrations found in {MIGRATIONS_DIR}")
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_xsell_connection()
     try:
-        _ensure_migrations_table(conn)
-        _bootstrap_legacy_migrations(conn)
+        cur = conn.cursor()
+        _ensure_migrations_table(cur)
+        conn.commit()
+
         applied_any = False
         for migration in files:
-            if _is_applied(conn, migration.name):
+            if _is_applied(cur, migration.name):
                 print(f"Skip {migration.name} (already applied)")
                 continue
             sql = migration.read_text(encoding="utf-8")
-            conn.executescript(sql)
-            _mark_applied(conn, migration.name)
+            try:
+                _run_sql_script(cur, sql)
+                _mark_applied(cur, migration.name)
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
             applied_any = True
             print(f"Applied {migration.name}")
-        conn.commit()
+
         if not applied_any:
             print("No pending migrations.")
-        tables = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-        ).fetchall()
-        print(f"Database: {DB_PATH}")
-        print("Tables:", [t[0] for t in tables])
+
+        cur.execute(
+            """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+            ORDER BY table_name
+            """
+        )
+        tables = [row["table_name"] for row in cur.fetchall()]
+        db_name = conn.get_dsn_parameters().get("dbname", "postgres")
+        print(f"Database: {db_name}")
+        print("Tables:", tables)
     finally:
         conn.close()
 

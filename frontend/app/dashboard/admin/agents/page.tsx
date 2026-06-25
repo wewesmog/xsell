@@ -95,7 +95,7 @@ export default function AgentsPage() {
             <Input
               value={staffNo}
               onChange={(e) => setStaffNo(e.target.value)}
-              placeholder="Staff number (e.g. KEN216725)"
+              placeholder="Staff number"
               disabled={saving}
             />
             <Input

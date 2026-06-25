@@ -8,7 +8,7 @@ from typing import Any
 
 from app.shared_services.oracle_db import OracleConnection, oracle_configured
 from app.xsell_helpers.exclusion_utils import exclusion_msisdns_from_lists
-from app.xsell_helpers.canon_main import _get_conn
+from app.shared_services.db import get_xsell_connection as _get_conn
 
 logger = logging.getLogger(__name__)
 
@@ -239,17 +239,19 @@ def preview_exclusions(
 def _lead_msisdns(list_id: str) -> set[str]:
     conn = _get_conn()
     try:
-        rows = conn.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
             SELECT DISTINCT msisdn_clean
             FROM list_rows
-            WHERE list_id = ?
-              AND is_valid = 1
+            WHERE list_id = %s
+              AND is_valid = TRUE
               AND decision = 'keep'
               AND msisdn_clean != ''
             """,
             (list_id,),
-        ).fetchall()
+        )
+        rows = cur.fetchall()
         return {str(r["msisdn_clean"]) for r in rows}
     finally:
         conn.close()

@@ -15,8 +15,9 @@ import {
   useAgentRoster,
 } from "@/components/schedule/agent-roster-context"
 import {
-  SchedulePageHeader,
+  SchedulePageIntro,
   ScheduleStepPanelHeader,
+  ScheduleWizardNav,
 } from "@/components/schedule/schedule-headers"
 import { ScheduleStepper, SCHEDULE_STEP_ICONS } from "@/components/schedule/schedule-stepper"
 import { ScheduleSummary } from "@/components/schedule/schedule-summary"
@@ -103,6 +104,16 @@ function ScheduleCampaignWizardInner() {
     }
   }, [editBroadcastId, duplicateFromId, form])
 
+  useEffect(() => {
+    if (roster.length === 0) return
+    const valid = new Set(roster.map((a) => a.staffNo))
+    const selected = form.getValues("agents.selectedStaffNos")
+    const pruned = selected.filter((staffNo) => valid.has(staffNo))
+    if (pruned.length !== selected.length) {
+      form.setValue("agents.selectedStaffNos", pruned, { shouldDirty: true })
+    }
+  }, [roster, form])
+
   const goNext = useCallback(() => {
     const values = form.getValues()
     setStepWarnings(getStepWarnings(currentStep, values, roster))
@@ -143,8 +154,10 @@ function ScheduleCampaignWizardInner() {
 
   return (
     <FormProvider {...form}>
+      <SchedulePageIntro />
+
       <div className="grid gap-6">
-        <SchedulePageHeader
+        <ScheduleWizardNav
           currentStep={currentStep}
           icon={SCHEDULE_STEP_ICONS[SCHEDULE_STEPS[currentStep].id]}
           onBack={goBack}
@@ -160,7 +173,7 @@ function ScheduleCampaignWizardInner() {
           onStepSelect={goToStep}
         />
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
+        <div className="grid gap-6 pb-6 lg:grid-cols-[1fr_280px]">
           <Card className="overflow-hidden">
             <ScheduleStepPanelHeader
               stepId={SCHEDULE_STEPS[currentStep].id}

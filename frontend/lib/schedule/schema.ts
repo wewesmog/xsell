@@ -52,7 +52,8 @@ export const campaignDraftSchema = z.object({
     excludedCount: z.number(),
   }),
   ranking: z.object({
-    criteria: z.array(criterionSchema).min(1, "Add at least one ranking field"),
+    enabled: z.boolean(),
+    criteria: z.array(criterionSchema),
     winsorize: z.enum(["none", "p5-p95"]),
     agentVisibleColumns: z
       .array(z.string())
@@ -211,6 +212,25 @@ function validateRankingStep(
   const base = campaignDraftSchema.shape.ranking.safeParse(ranking)
   if (!base.success) return { success: false, error: base.error }
 
+  const compulsoryLabels = COMPULSORY_FIELDS.map((f) => f.displayLabel)
+  const missing = compulsoryLabels.filter((l) => !ranking.agentVisibleColumns.includes(l))
+  if (missing.length > 0) {
+    return {
+      success: false as const,
+      error: new z.ZodError([
+        {
+          code: "custom",
+          message: `Agent workbooks must include: ${missing.join(", ")}`,
+          path: ["agentVisibleColumns"],
+        },
+      ]),
+    }
+  }
+
+  if (!ranking.enabled) {
+    return { success: true }
+  }
+
   if (ranking.criteria.length === 0) {
     return {
       success: false as const,
@@ -249,21 +269,6 @@ function validateRankingStep(
           code: "custom",
           message: `Duplicate ranking field: ${duplicateColumn.column}`,
           path: ["criteria"],
-        },
-      ]),
-    }
-  }
-
-  const compulsoryLabels = COMPULSORY_FIELDS.map((f) => f.displayLabel)
-  const missing = compulsoryLabels.filter((l) => !ranking.agentVisibleColumns.includes(l))
-  if (missing.length > 0) {
-    return {
-      success: false as const,
-      error: new z.ZodError([
-        {
-          code: "custom",
-          message: `Agent workbooks must include: ${missing.join(", ")}`,
-          path: ["agentVisibleColumns"],
         },
       ]),
     }

@@ -1,4 +1,4 @@
-"""Upsert agent workbook responses — variable columns via JSON (SQLite + Oracle compatible)."""
+"""Upsert agent workbook responses — variable columns via JSON."""
 
 from __future__ import annotations
 
@@ -6,10 +6,12 @@ import json
 from typing import Any
 from uuid import uuid4
 
-import sqlite3
+import psycopg2
 
+from app.shared_services.db import get_xsell_connection as _get_conn
+from app.shared_services.db import is_undefined_table
 from app.xsell_helpers.broadcast_main import get_broadcast
-from app.xsell_helpers.canon_main import _get_conn, _normalize_msisdn
+from app.xsell_helpers.canon_main import _normalize_msisdn
 
 
 def _parse_json_obj(raw: str | dict | None) -> dict[str, Any]:
@@ -22,7 +24,7 @@ def _parse_json_obj(raw: str | dict | None) -> dict[str, Any]:
         return {}
 
 
-def _row_to_response(row: sqlite3.Row) -> dict[str, Any]:
+def _row_to_response(row: dict) -> dict[str, Any]:
     data = dict(row)
     data["assignment_json"] = _parse_json_obj(data.get("assignment_json"))
     data["responses_json"] = _parse_json_obj(data.get("responses_json"))
@@ -32,10 +34,12 @@ def _row_to_response(row: sqlite3.Row) -> dict[str, Any]:
 def get_workbook_schema(broadcast_id: str) -> dict[str, Any] | None:
     conn = _get_conn()
     try:
-        row = conn.execute(
-            "SELECT workbook_schema_json FROM broadcasts WHERE broadcast_id = ?",
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT workbook_schema_json FROM broadcasts WHERE broadcast_id = %s",
             (broadcast_id,),
-        ).fetchone()
+        )
+        row = cur.fetchone()
         if not row or not row["workbook_schema_json"]:
             return None
         schema = _parse_json_obj(row["workbook_schema_json"])
@@ -56,23 +60,25 @@ def list_responses(
     query = """
         SELECT *
         FROM broadcast_responses
-        WHERE broadcast_id = ?
+        WHERE broadcast_id = %s
     """
     params: list[str] = [broadcast_id]
     if staff_no:
-        query += " AND staff_no = ?"
+        query += " AND staff_no = %s"
         params.append(staff_no.strip().upper())
     if assigned_date:
-        query += " AND assigned_date = ?"
+        query += " AND assigned_date = %s"
         params.append(assigned_date.strip())
     query += " ORDER BY assigned_date, staff_no, msisdn_clean"
 
     conn = _get_conn()
     try:
-        rows = conn.execute(query, params).fetchall()
+        cur = conn.cursor()
+        cur.execute(query, params)
+        rows = cur.fetchall()
         return [_row_to_response(r) for r in rows]
-    except sqlite3.OperationalError as exc:
-        if "no such table" in str(exc).lower():
+    except psycopg2.Error as exc:
+        if is_undefined_table(exc):
             raise ValueError(
                 "broadcast_responses table not found. Run: python scripts/apply_migration.py"
             ) from exc
@@ -122,14 +128,16 @@ def upsert_response(
 
     conn = _get_conn()
     try:
-        existing = conn.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
             SELECT response_id, assignment_json, responses_json
             FROM broadcast_responses
-            WHERE broadcast_id = ? AND staff_no = ? AND assigned_date = ? AND msisdn_clean = ?
+            WHERE broadcast_id = %s AND staff_no = %s AND assigned_date = %s AND msisdn_clean = %s
             """,
             (broadcast_id, code, date, msisdn_clean),
-        ).fetchone()
+        )
+        existing = cur.fetchone()
 
         if existing:
             merged_assignment = _merge_responses(
@@ -140,13 +148,13 @@ def upsert_response(
                 _parse_json_obj(existing["responses_json"]),
                 responses or {},
             )
-            conn.execute(
+            cur.execute(
                 """
                 UPDATE broadcast_responses
-                SET lead_id = COALESCE(?, lead_id),
-                    assignment_json = ?,
-                    responses_json = ?
-                WHERE response_id = ?
+                SET lead_id = COALESCE(%s, lead_id),
+                    assignment_json = %s,
+                    responses_json = %s
+                WHERE response_id = %s
                 """,
                 (
                     lead_id,
@@ -159,12 +167,12 @@ def upsert_response(
             response_id = existing["response_id"]
         else:
             response_id = str(uuid4())
-            conn.execute(
+            cur.execute(
                 """
                 INSERT INTO broadcast_responses (
                     response_id, broadcast_id, staff_no, assigned_date,
                     msisdn_clean, lead_id, assignment_json, responses_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     response_id,
@@ -179,10 +187,11 @@ def upsert_response(
             )
             conn.commit()
 
-        row = conn.execute(
-            "SELECT * FROM broadcast_responses WHERE response_id = ?",
+        cur.execute(
+            "SELECT * FROM broadcast_responses WHERE response_id = %s",
             (response_id,),
-        ).fetchone()
+        )
+        row = cur.fetchone()
         if not row:
             raise ValueError("Failed to save response")
         return _row_to_response(row)
@@ -243,8 +252,9 @@ def seed_responses_from_assignment(
 def save_workbook_schema(broadcast_id: str, schema: dict[str, Any]) -> None:
     conn = _get_conn()
     try:
-        conn.execute(
-            "UPDATE broadcasts SET workbook_schema_json = ? WHERE broadcast_id = ?",
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE broadcasts SET workbook_schema_json = %s WHERE broadcast_id = %s",
             (json.dumps(schema), broadcast_id),
         )
         conn.commit()

@@ -1,5 +1,8 @@
 """Pydantic models for broadcast agent responses API."""
 
+from __future__ import annotations
+
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -19,8 +22,8 @@ class BroadcastResponseRow(BaseModel):
     lead_id: str | None = None
     assignment_json: dict[str, Any] = Field(default_factory=dict)
     responses_json: dict[str, Any] = Field(default_factory=dict)
-    created_at: str = ""
-    updated_at: str = ""
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class BroadcastResponseCollection(BaseModel):

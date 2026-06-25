@@ -1,5 +1,8 @@
 """Pydantic models for list ingestion API (enums must match migrations/001_list_ingestion_schema.sql)."""
 
+from __future__ import annotations
+
+from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -82,8 +85,8 @@ class ListSummary(BaseModel):
     uploaded_by: str
     status: ListDbStatus
     row_count_clean: int = Field(ge=0)
-    uploaded_on: str
-    updated_on: str
+    uploaded_on: datetime
+    updated_on: datetime
 
 
 class ListCollectionResponse(BaseModel):
@@ -99,8 +102,8 @@ class ListDetailResponse(BaseModel):
     status: ListDbStatus
     row_count_raw: int = Field(ge=0)
     row_count_clean: int = Field(ge=0)
-    uploaded_on: str | None = None
-    updated_on: str
+    uploaded_on: datetime | None = None
+    updated_on: datetime
 
 
 class ListColumnsResponse(BaseModel):

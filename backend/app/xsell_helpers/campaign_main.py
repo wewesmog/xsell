@@ -1,10 +1,13 @@
-"""Campaign CRUD against SQLite."""
+"""Campaign CRUD against PostgreSQL."""
+
+from __future__ import annotations
 
 from uuid import uuid4
 
-import sqlite3
+import psycopg2
 
-from app.xsell_helpers.canon_main import _get_conn
+from app.shared_services.db import get_xsell_connection as _get_conn
+from app.shared_services.db import is_unique_violation, is_undefined_table
 
 _CAMPAIGN_SELECT = """
     SELECT
@@ -33,23 +36,26 @@ def create_campaign(
     campaign_id = str(uuid4())
     conn = _get_conn()
     try:
-        conn.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
             INSERT INTO campaigns (campaign_id, campaign_name, description, created_by, status)
-            VALUES (?, ?, ?, ?, 'active')
+            VALUES (%s, %s, %s, %s, 'active')
             """,
             (campaign_id, name, description.strip(), created_by.strip() or "frontend-user"),
         )
         conn.commit()
-        row = conn.execute(
-            f"{_CAMPAIGN_SELECT} WHERE c.campaign_id = ?",
+        cur.execute(
+            f"{_CAMPAIGN_SELECT} WHERE c.campaign_id = %s",
             (campaign_id,),
-        ).fetchone()
+        )
+        row = cur.fetchone()
         if not row:
             raise ValueError("Failed to create campaign")
         return dict(row)
-    except sqlite3.IntegrityError as exc:
-        if "unique" in str(exc).lower():
+    except psycopg2.IntegrityError as exc:
+        conn.rollback()
+        if is_unique_violation(exc):
             raise ValueError("Campaign name already exists") from exc
         raise ValueError("Failed to create campaign") from exc
     finally:
@@ -59,12 +65,12 @@ def create_campaign(
 def list_campaigns() -> list[dict]:
     conn = _get_conn()
     try:
-        rows = conn.execute(
-            f"{_CAMPAIGN_SELECT} ORDER BY c.created_at DESC"
-        ).fetchall()
+        cur = conn.cursor()
+        cur.execute(f"{_CAMPAIGN_SELECT} ORDER BY c.created_at DESC")
+        rows = cur.fetchall()
         return [dict(r) for r in rows]
-    except sqlite3.OperationalError as exc:
-        if "no such table" in str(exc).lower():
+    except psycopg2.Error as exc:
+        if is_undefined_table(exc):
             raise ValueError(
                 "Campaigns table not found. Run: python scripts/apply_migration.py"
             ) from exc
@@ -76,10 +82,12 @@ def list_campaigns() -> list[dict]:
 def get_campaign(campaign_id: str) -> dict | None:
     conn = _get_conn()
     try:
-        row = conn.execute(
-            f"{_CAMPAIGN_SELECT} WHERE c.campaign_id = ?",
+        cur = conn.cursor()
+        cur.execute(
+            f"{_CAMPAIGN_SELECT} WHERE c.campaign_id = %s",
             (campaign_id,),
-        ).fetchone()
+        )
+        row = cur.fetchone()
         return dict(row) if row else None
     finally:
         conn.close()
@@ -103,17 +111,17 @@ def update_campaign(
         name = campaign_name.strip()
         if not name:
             raise ValueError("Campaign name is required")
-        fields.append("campaign_name = ?")
+        fields.append("campaign_name = %s")
         params.append(name)
 
     if description is not None:
-        fields.append("description = ?")
+        fields.append("description = %s")
         params.append(description.strip())
 
     if status is not None:
         if status not in ("active", "inactive"):
             raise ValueError("Status must be active or inactive")
-        fields.append("status = ?")
+        fields.append("status = %s")
         params.append(status)
 
     if not fields:
@@ -122,8 +130,9 @@ def update_campaign(
     params.append(campaign_id)
     conn = _get_conn()
     try:
-        conn.execute(
-            f"UPDATE campaigns SET {', '.join(fields)} WHERE campaign_id = ?",
+        cur = conn.cursor()
+        cur.execute(
+            f"UPDATE campaigns SET {', '.join(fields)} WHERE campaign_id = %s",
             params,
         )
         conn.commit()
@@ -131,8 +140,9 @@ def update_campaign(
         if not updated:
             raise ValueError("Failed to update campaign")
         return updated
-    except sqlite3.IntegrityError as exc:
-        if "unique" in str(exc).lower():
+    except psycopg2.IntegrityError as exc:
+        conn.rollback()
+        if is_unique_violation(exc):
             raise ValueError("Campaign name already exists") from exc
         raise
     finally:
@@ -142,8 +152,9 @@ def update_campaign(
 def delete_campaign(campaign_id: str) -> None:
     conn = _get_conn()
     try:
-        cur = conn.execute(
-            "DELETE FROM campaigns WHERE campaign_id = ?",
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM campaigns WHERE campaign_id = %s",
             (campaign_id,),
         )
         conn.commit()

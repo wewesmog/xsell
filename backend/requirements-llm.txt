@@ -1,0 +1,10 @@
+# Optional — legacy LLM / conversation modules (not required for xsell UI/API)
+-r requirements.txt
+
+openai>=1.0.0
+instructor>=1.0.0
+langchain-core>=0.2.0
+langchain-openai>=0.1.0
+langgraph>=0.2.0
+asyncpg>=0.28.0
+SQLAlchemy>=2.0.0

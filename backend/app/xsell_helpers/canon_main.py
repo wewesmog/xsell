@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import json
 import logging
-import sqlite3
 from pathlib import Path
 from uuid import uuid4
 
 import pandas as pd
+import psycopg2
 from fastapi import UploadFile
 
 from app.models.list_ingestion_models import (
@@ -12,6 +14,8 @@ from app.models.list_ingestion_models import (
     RowDecision,
     StagingStatus,
 )
+from app.shared_services.db import get_xsell_connection as _get_conn
+from app.shared_services.db import is_unique_violation
 from app.xsell_helpers.file_ingest import (
     extension_for_filename,
     is_supported_upload,
@@ -25,24 +29,7 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = BASE_DIR / "data"
 UPLOADS_DIR = DATA_DIR / "uploads"
-DB_PATH = BASE_DIR / "xsell.db"
 _INSERT_BATCH_SIZE = 5_000
-
-
-def _configure_connection(conn: sqlite3.Connection) -> None:
-    """Reduce 'database is locked' under concurrent API requests + large writes."""
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA synchronous = NORMAL")
-    conn.execute("PRAGMA busy_timeout = 30000")
-    conn.row_factory = sqlite3.Row
-
-
-def _get_conn() -> sqlite3.Connection:
-    _ensure_paths()
-    conn = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)
-    _configure_connection(conn)
-    return conn
 
 
 def _ensure_paths() -> None:
@@ -50,12 +37,12 @@ def _ensure_paths() -> None:
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _insert_list_rows_batched(cur: sqlite3.Cursor, list_id: str, deduped: pd.DataFrame) -> None:
+def _insert_list_rows_batched(cur, list_id: str, deduped: pd.DataFrame) -> None:
     insert_sql = """
         INSERT INTO list_rows (
             row_id, list_id, source_row_number, msisdn_clean, customer_name,
             others_json, row_hash, decision
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """
     batch: list[tuple] = []
     for idx, r in deduped.iterrows():
@@ -86,7 +73,9 @@ def _normalize_msisdn(value: object) -> str:
     return f"254{digits[-9:]}"
 
 
-def _safe_json_load(payload: str) -> dict:
+def _safe_json_load(payload: str | dict | None) -> dict:
+    if isinstance(payload, dict):
+        return payload
     try:
         obj = json.loads(payload or "{}")
         return obj if isinstance(obj, dict) else {}
@@ -302,10 +291,11 @@ def clean_list(
     conn = _get_conn()
     try:
         cur = conn.cursor()
-        existing = cur.execute(
-            "SELECT list_id, status FROM lists WHERE list_id = ?",
+        cur.execute(
+            "SELECT list_id, status FROM lists WHERE list_id = %s",
             (list_id,),
-        ).fetchone()
+        )
+        existing = cur.fetchone()
         if existing:
             if existing["status"] == ListDbStatus.ready.value:
                 raise ValueError("List already approved")
@@ -316,14 +306,14 @@ def clean_list(
                 cur.execute(
                     """
                     INSERT INTO lists (list_id, list_name, uploaded_by, status)
-                    VALUES (?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s)
                     """,
                     (list_id, resolved_name, uploaded_by, ListDbStatus.processing.value),
                 )
                 conn.commit()
-            except sqlite3.IntegrityError as exc:
+            except psycopg2.IntegrityError as exc:
                 conn.rollback()
-                if "UNIQUE constraint failed" in str(exc):
+                if is_unique_violation(exc):
                     raise ValueError(
                         f"A list named '{resolved_name}' already exists for this user"
                     ) from exc
@@ -349,12 +339,12 @@ def clean_list(
             cur.execute(
                 """
                 UPDATE lists
-                SET row_count_raw = 0, row_count_clean = 0, status = ?
-                WHERE list_id = ?
+                SET row_count_raw = 0, row_count_clean = 0, status = %s
+                WHERE list_id = %s
                 """,
                 (ListDbStatus.processing.value, list_id),
             )
-            cur.execute("DELETE FROM list_rows WHERE list_id = ?", (list_id,))
+            cur.execute("DELETE FROM list_rows WHERE list_id = %s", (list_id,))
             conn.commit()
             return _clean_stats_payload(
                 list_id,
@@ -385,14 +375,14 @@ def clean_list(
         clean_count = len(deduped)
         duplicate_count = len(df) - clean_count
 
-        cur.execute("DELETE FROM list_rows WHERE list_id = ?", (list_id,))
+        cur.execute("DELETE FROM list_rows WHERE list_id = %s", (list_id,))
         _insert_list_rows_batched(cur, list_id, deduped)
 
         cur.execute(
             """
             UPDATE lists
-            SET list_name = ?, row_count_raw = ?, row_count_clean = ?, status = ?
-            WHERE list_id = ?
+            SET list_name = %s, row_count_raw = %s, row_count_clean = %s, status = %s
+            WHERE list_id = %s
             """,
             (resolved_name, raw_count, clean_count, ListDbStatus.processing.value, list_id),
         )
@@ -409,8 +399,9 @@ def clean_list(
         raise
     except Exception:
         conn.rollback()
-        conn.execute(
-            "DELETE FROM lists WHERE list_id = ? AND status = ?",
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM lists WHERE list_id = %s AND status = %s",
             (list_id, ListDbStatus.processing.value),
         )
         conn.commit()
@@ -427,13 +418,15 @@ def approve_list(
     """Approve after user has reviewed clean stats; marks list ready for campaigns."""
     conn = _get_conn()
     try:
-        row = conn.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
             SELECT list_id, list_name, status, row_count_raw, row_count_clean
-            FROM lists WHERE list_id = ?
+            FROM lists WHERE list_id = %s
             """,
             (list_id,),
-        ).fetchone()
+        )
+        row = cur.fetchone()
         if not row:
             raise ValueError("List not found; run clean first")
         if row["status"] == ListDbStatus.ready.value:
@@ -454,18 +447,18 @@ def approve_list(
             raise ValueError("List name is required")
 
         try:
-            conn.execute(
+            cur.execute(
                 """
                 UPDATE lists
-                SET list_name = ?, status = ?
-                WHERE list_id = ?
+                SET list_name = %s, status = %s
+                WHERE list_id = %s
                 """,
                 (resolved_name, ListDbStatus.ready.value, list_id),
             )
             conn.commit()
-        except sqlite3.IntegrityError as exc:
+        except psycopg2.IntegrityError as exc:
             conn.rollback()
-            if "UNIQUE constraint failed" in str(exc):
+            if is_unique_violation(exc):
                 raise ValueError(
                     f"A list named '{resolved_name}' already exists for this user"
                 ) from exc
@@ -491,17 +484,19 @@ def cancel_list_upload(list_id: str) -> dict:
     conn = _get_conn()
     row = None
     try:
+        cur = conn.cursor()
         try:
-            row = conn.execute(
-                "SELECT status FROM lists WHERE list_id = ?",
+            cur.execute(
+                "SELECT status FROM lists WHERE list_id = %s",
                 (list_id,),
-            ).fetchone()
-        except sqlite3.OperationalError:
+            )
+            row = cur.fetchone()
+        except psycopg2.Error:
             row = None
         if row:
             if row["status"] == ListDbStatus.ready.value:
                 raise ValueError("Cannot cancel an approved list; archive instead")
-            conn.execute("DELETE FROM lists WHERE list_id = ?", (list_id,))
+            cur.execute("DELETE FROM lists WHERE list_id = %s", (list_id,))
             conn.commit()
     finally:
         conn.close()
@@ -516,15 +511,17 @@ def cancel_list_upload(list_id: str) -> dict:
 def get_list_status(list_id: str) -> dict | None:
     conn = _get_conn()
     try:
-        row = conn.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
             SELECT list_id, list_name, uploaded_by, status, row_count_raw, row_count_clean,
                    uploaded_on, updated_on
             FROM lists
-            WHERE list_id = ?
+            WHERE list_id = %s
             """,
             (list_id,),
-        ).fetchone()
+        )
+        row = cur.fetchone()
         if not row:
             return None
         return dict(row)
@@ -535,8 +532,8 @@ def get_list_status(list_id: str) -> dict | None:
 _LIST_SORT_SQL = {
     "newest": "uploaded_on DESC",
     "oldest": "uploaded_on ASC",
-    "name_asc": "list_name COLLATE NOCASE ASC",
-    "name_desc": "list_name COLLATE NOCASE DESC",
+    "name_asc": "LOWER(list_name) ASC",
+    "name_desc": "LOWER(list_name) DESC",
     "rows_desc": "row_count_clean DESC, uploaded_on DESC",
     "rows_asc": "row_count_clean ASC, uploaded_on DESC",
 }
@@ -563,18 +560,19 @@ def list_lists(
         clauses: list[str] = []
         params: list[object] = []
         if include_archived:
-            clauses.append("status IN (?, ?)")
+            clauses.append("status IN (%s, %s)")
             params.extend([ListDbStatus.ready.value, ListDbStatus.archived.value])
         else:
-            clauses.append("status = ?")
+            clauses.append("status = %s")
             params.append(ListDbStatus.ready.value)
 
         if search and search.strip():
-            clauses.append("list_name LIKE ?")
+            clauses.append("list_name ILIKE %s")
             params.append(f"%{search.strip()}%")
 
         where_sql = " AND ".join(clauses)
-        rows = conn.execute(
+        cur = conn.cursor()
+        cur.execute(
             f"""
             SELECT list_id, list_name, uploaded_by, status, row_count_clean, uploaded_on, updated_on
             FROM lists
@@ -583,7 +581,8 @@ def list_lists(
             {limit_sql}
             """,
             params,
-        ).fetchall()
+        )
+        rows = cur.fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()
@@ -624,10 +623,12 @@ def get_list_columns(list_id: str) -> dict | None:
     """Return list column metadata and numeric columns inferred from stored rows."""
     conn = _get_conn()
     try:
-        row = conn.execute(
-            "SELECT list_id FROM lists WHERE list_id = ?",
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT list_id FROM lists WHERE list_id = %s",
             (list_id,),
-        ).fetchone()
+        )
+        row = cur.fetchone()
         if not row:
             return None
 
@@ -640,15 +641,16 @@ def get_list_columns(list_id: str) -> dict | None:
         msisdn_col = str(mapping.get("msisdnColumn", "") or "")
         name_col = str(mapping.get("nameColumn", "") or "")
 
-        sample_rows_db = conn.execute(
+        cur.execute(
             """
             SELECT others_json
             FROM list_rows
-            WHERE list_id = ? AND is_valid = 1
+            WHERE list_id = %s AND is_valid = TRUE
             LIMIT 50
             """,
             (list_id,),
-        ).fetchall()
+        )
+        sample_rows_db = cur.fetchall()
 
         preview_rows: list[dict[str, str]] = []
         header_set: set[str] = set()
@@ -689,19 +691,21 @@ def archive_list(list_id: str) -> dict:
     """Soft-disable a list (status=archived); rows stay in DB; name can be reused."""
     conn = _get_conn()
     try:
-        cur = conn.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
             UPDATE lists
-            SET status = ?, updated_on = datetime('now')
-            WHERE list_id = ? AND status = ?
+            SET status = %s, updated_on = NOW()
+            WHERE list_id = %s AND status = %s
             """,
             (ListDbStatus.archived.value, list_id, ListDbStatus.ready.value),
         )
         conn.commit()
         if cur.rowcount == 0:
-            existing = conn.execute(
-                "SELECT list_id, status FROM lists WHERE list_id = ?", (list_id,)
-            ).fetchone()
+            cur.execute(
+                "SELECT list_id, status FROM lists WHERE list_id = %s", (list_id,)
+            )
+            existing = cur.fetchone()
             if not existing:
                 raise ValueError("List not found")
             raise ValueError("Only approved lists can be archived")

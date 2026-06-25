@@ -1,6 +1,6 @@
 /**
- * Central cleanup for browser persistence (schedule drafts, legacy list cache, etc.).
- * Lists and broadcasts live in the API / SQLite — not localStorage.
+ * Central cleanup for browser persistence (legacy list cache, column label presets).
+ * Lists, broadcasts, and campaigns live in PostgreSQL via the API — not localStorage.
  */
 
 import { STORAGE_KEY } from "@/lib/schedule/constants"

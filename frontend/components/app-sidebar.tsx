@@ -66,7 +66,7 @@ const data = {
           url: "/dashboard/campaign/campaigns",
         },
         {
-          title: "Schedule",
+          title: "Broadcast",
           url: "/dashboard/campaign/schedule",
         },
         {

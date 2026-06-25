@@ -42,6 +42,7 @@ export function ListIngestionPage() {
   const [listName, setListName] = useState("")
   const [headers, setHeaders] = useState<string[]>([])
   const [rows, setRows] = useState<Record<string, string>[]>([])
+  const [loadedRowCount, setLoadedRowCount] = useState(0)
   const [msisdnColumn, setMsisdnColumn] = useState("")
   const [nameColumn, setNameColumn] = useState("")
   const [columnRenames, setColumnRenames] = useState<ColumnRename[]>([])
@@ -77,6 +78,7 @@ export function ListIngestionPage() {
     setListName("")
     setHeaders([])
     setRows([])
+    setLoadedRowCount(0)
     setMsisdnColumn("")
     setNameColumn("")
     setColumnRenames([])
@@ -103,22 +105,27 @@ export function ListIngestionPage() {
       let parsedHeaders: string[] = []
       let parsedRows: Record<string, string>[] = []
 
+      let parsedRowCount = 0
+
       if (isExcel) {
         setStatusText("Reading file...")
         const preview = await previewListFile(file)
         parsedHeaders = preview.headers
         parsedRows = preview.preview_rows
+        parsedRowCount = preview.row_count
         setStatusText("")
       } else {
         const text = await file.text()
         const parsed = parseDelimitedText(text)
         parsedHeaders = parsed.headers
         parsedRows = parsed.rows
+        parsedRowCount = parsed.rows.length
         if (parsedHeaders.length === 0) {
           setStatusText("Parsing file on server...")
           const preview = await previewListFile(file)
           parsedHeaders = preview.headers
           parsedRows = preview.preview_rows
+          parsedRowCount = preview.row_count
           setStatusText("")
         }
       }
@@ -135,6 +142,7 @@ export function ListIngestionPage() {
       setListName(defaultListNameFromFileName(file.name))
       setHeaders(parsedHeaders)
       setRows(parsedRows)
+      setLoadedRowCount(parsedRowCount)
       setMsisdnColumn(guessedMsisdn)
       setNameColumn(guessedName)
       setColumnRenames(buildColumnRenames(parsedHeaders))
@@ -164,7 +172,7 @@ export function ListIngestionPage() {
   }
 
   async function runCleanup() {
-    if (!selectedFile || !listName.trim() || headers.length === 0 || rows.length === 0) return
+    if (!selectedFile || !listName.trim() || headers.length === 0 || loadedRowCount === 0) return
     let stagedId = pendingListId
     try {
       setBusy(true)
@@ -345,7 +353,9 @@ export function ListIngestionPage() {
 
           <div className="flex items-center justify-between">
             <div className="text-muted-foreground text-sm">
-              {rows.length > 0 ? `${rows.length.toLocaleString()} rows loaded` : "No rows loaded yet"}
+              {loadedRowCount > 0
+                ? `${loadedRowCount.toLocaleString()} rows in file`
+                : "No rows loaded yet"}
               {pendingListId && !cleanStats ? " · staged" : ""}
               {cleanStats ? " · awaiting approval" : ""}
             </div>
@@ -359,7 +369,7 @@ export function ListIngestionPage() {
                 type="button"
                 variant="outline"
                 onClick={() => void runCleanup()}
-                disabled={busy || rows.length === 0 || !listName.trim()}
+                disabled={busy || loadedRowCount === 0 || !listName.trim()}
               >
                 Run cleanup
               </Button>

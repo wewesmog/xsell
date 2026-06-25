@@ -136,11 +136,13 @@ export function ReviewStep({ onSaved, onGenerated }: Props) {
           <Separator />
           <Section title="Ranking">
             <p>
-              {data.ranking.criteria.length > 0
-                ? data.ranking.criteria
-                    .map((c) => `${c.column} ${c.weight}%`)
-                    .join(" · ")
-                : "No ranking fields"}
+              {!data.ranking.enabled
+                ? "Disabled — leads keep ingest order"
+                : data.ranking.criteria.length > 0
+                  ? data.ranking.criteria
+                      .map((c) => `${c.column} ${c.weight}%`)
+                      .join(" · ")
+                  : "Enabled but no ranking fields configured"}
             </p>
           </Section>
           <Separator />

@@ -55,7 +55,7 @@ export function assignmentModeHint(
         ? `Leads are stratified by ${col} (low / mid / high) so each agent-day gets a similar mix.`
         : "Choose a numeric column below; leads are stratified into low/mid/high buckets per agent-day."
     case "random":
-      return "Ranked leads are shuffled, then distributed round-robin up to each agent-day quota."
+      return "Leads are shuffled, then distributed round-robin up to each agent-day quota."
   }
 }
 
@@ -77,7 +77,8 @@ export function describeAssignmentStrategy(draft: CampaignDraft): string {
 export function describeSharingRun(draft: CampaignDraft): string {
   const quota = draft.volume.leadsPerAgentPerDay
   const phoneLabel = draft.leads.msisdnColumn?.trim() || "the phone column you selected"
-  return `After ranking, each agent-day receives up to ${quota} leads (daily quota from Volume). One ${phoneLabel} per agent-day; duplicates are removed and back-filled from the reserve pool.`
+  const leadPhrase = draft.ranking.enabled ? "After ranking, each agent-day" : "Each agent-day"
+  return `${leadPhrase} receives up to ${quota} leads (daily quota from Volume). One ${phoneLabel} per agent-day; duplicates are removed and back-filled from the reserve pool.`
 }
 
 export function getSharingPreviewBlockers(draft: CampaignDraft): string[] {

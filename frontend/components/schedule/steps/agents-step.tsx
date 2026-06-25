@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect } from "react"
 import { Controller, useFormContext } from "react-hook-form"
 import type { CampaignDraft } from "@/lib/schedule/types"
 import { useAgentRoster } from "@/components/schedule/agent-roster-context"
@@ -25,7 +26,18 @@ export function AgentsStep() {
   const useFirstN = watch("agents.useFirstN")
   const firstN = watch("agents.firstN") ?? 25
 
-  const filtered = roster.filter(
+  const activeRoster = roster.filter((a) => a.active)
+
+  useEffect(() => {
+    if (loading) return
+    const valid = new Set(roster.map((a) => a.staffNo))
+    const pruned = selected.filter((staffNo) => valid.has(staffNo))
+    if (pruned.length !== selected.length) {
+      setValue("agents.selectedStaffNos", pruned)
+    }
+  }, [loading, roster, selected, setValue])
+
+  const filtered = activeRoster.filter(
     (a) =>
       a.staffName.toLowerCase().includes(search) ||
       a.staffNo.toLowerCase().includes(search)
@@ -39,7 +51,7 @@ export function AgentsStep() {
   function selectAll() {
     setValue(
       "agents.selectedStaffNos",
-      filtered.filter((a) => a.active).map((a) => a.staffNo)
+      filtered.map((a) => a.staffNo)
     )
   }
 
@@ -90,7 +102,9 @@ export function AgentsStep() {
                 <p className="text-muted-foreground p-2 text-sm">Loading agents…</p>
               ) : filtered.length === 0 ? (
                 <p className="text-muted-foreground p-2 text-sm">
-                  No agents in admin roster. Add agents under Admin → Agents.
+                  {roster.length === 0
+                    ? "No agents in admin roster. Add agents under Admin → Agents."
+                    : "No active agents match your search."}
                 </p>
               ) : (
                 filtered.map((agent) => {
@@ -149,14 +163,14 @@ export function AgentsStep() {
                   <Input
                     type="number"
                     min={1}
-                    max={roster.length || 1}
+                    max={activeRoster.length || 1}
                     value={field.value}
                     onChange={(e) => {
                       const n = Number(e.target.value)
                       field.onChange(n)
                       setValue(
                         "agents.selectedStaffNos",
-                        roster.slice(0, n).map((a) => a.staffNo)
+                        activeRoster.slice(0, n).map((a) => a.staffNo)
                       )
                     }}
                   />

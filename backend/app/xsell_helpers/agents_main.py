@@ -4,23 +4,25 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-import sqlite3
+import psycopg2
 
-from app.xsell_helpers.canon_main import _get_conn
+from app.shared_services.db import get_xsell_connection as _get_conn
+from app.shared_services.db import is_unique_violation, is_undefined_table
 
 
-def _row_to_agent(row: sqlite3.Row, absent_dates: list[str] | None = None) -> dict:
+def _row_to_agent(row: dict, absent_dates: list[str] | None = None) -> dict:
     data = dict(row)
-    data["active"] = bool(data.get("active", 1))
+    data["active"] = bool(data.get("active", True))
     data["absent_dates"] = sorted(absent_dates or [])
     return data
 
 
-def _load_absent_dates(conn: sqlite3.Connection, staff_nos: list[str]) -> dict[str, list[str]]:
+def _load_absent_dates(conn, staff_nos: list[str]) -> dict[str, list[str]]:
     if not staff_nos:
         return {}
-    placeholders = ",".join("?" for _ in staff_nos)
-    rows = conn.execute(
+    placeholders = ",".join("%s" for _ in staff_nos)
+    cur = conn.cursor()
+    cur.execute(
         f"""
         SELECT staff_no, absent_date
         FROM roster_absences
@@ -28,7 +30,8 @@ def _load_absent_dates(conn: sqlite3.Connection, staff_nos: list[str]) -> dict[s
         ORDER BY absent_date
         """,
         staff_nos,
-    ).fetchall()
+    )
+    rows = cur.fetchall()
     out: dict[str, list[str]] = {s: [] for s in staff_nos}
     for row in rows:
         out.setdefault(row["staff_no"], []).append(row["absent_date"])
@@ -40,14 +43,16 @@ def list_agents(*, active_only: bool = False) -> list[dict]:
     try:
         query = "SELECT staff_no, staff_name, active, created_at, updated_at FROM agents"
         if active_only:
-            query += " WHERE active = 1"
-        query += " ORDER BY staff_name COLLATE NOCASE"
-        rows = conn.execute(query).fetchall()
+            query += " WHERE active = TRUE"
+        query += " ORDER BY LOWER(staff_name)"
+        cur = conn.cursor()
+        cur.execute(query)
+        rows = cur.fetchall()
         staff_nos = [r["staff_no"] for r in rows]
         absences = _load_absent_dates(conn, staff_nos)
         return [_row_to_agent(r, absences.get(r["staff_no"], [])) for r in rows]
-    except sqlite3.OperationalError as exc:
-        if "no such table" in str(exc).lower():
+    except psycopg2.Error as exc:
+        if is_undefined_table(exc):
             raise ValueError(
                 "Agents table not found. Run: python scripts/apply_migration.py"
             ) from exc
@@ -59,13 +64,15 @@ def list_agents(*, active_only: bool = False) -> list[dict]:
 def get_agent(staff_no: str) -> dict | None:
     conn = _get_conn()
     try:
-        row = conn.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
             SELECT staff_no, staff_name, active, created_at, updated_at
-            FROM agents WHERE staff_no = ?
+            FROM agents WHERE staff_no = %s
             """,
             (staff_no.strip(),),
-        ).fetchone()
+        )
+        row = cur.fetchone()
         if not row:
             return None
         absences = _load_absent_dates(conn, [staff_no])
@@ -84,20 +91,22 @@ def create_agent(*, staff_no: str, staff_name: str, active: bool = True) -> dict
 
     conn = _get_conn()
     try:
-        conn.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
             INSERT INTO agents (staff_no, staff_name, active)
-            VALUES (?, ?, ?)
+            VALUES (%s, %s, %s)
             """,
-            (code, name, 1 if active else 0),
+            (code, name, active),
         )
         conn.commit()
         created = get_agent(code)
         if not created:
             raise ValueError("Failed to create agent")
         return created
-    except sqlite3.IntegrityError as exc:
-        if "unique" in str(exc).lower() or "primary" in str(exc).lower():
+    except psycopg2.IntegrityError as exc:
+        conn.rollback()
+        if is_unique_violation(exc):
             raise ValueError("Staff number already exists") from exc
         raise ValueError("Failed to create agent") from exc
     finally:
@@ -120,19 +129,20 @@ def update_agent(
         name = staff_name.strip()
         if not name:
             raise ValueError("Staff name is required")
-        fields.append("staff_name = ?")
+        fields.append("staff_name = %s")
         params.append(name)
     if active is not None:
-        fields.append("active = ?")
-        params.append(1 if active else 0)
+        fields.append("active = %s")
+        params.append(active)
     if not fields:
         return existing
 
     params.append(staff_no.strip())
     conn = _get_conn()
     try:
-        conn.execute(
-            f"UPDATE agents SET {', '.join(fields)} WHERE staff_no = ?",
+        cur = conn.cursor()
+        cur.execute(
+            f"UPDATE agents SET {', '.join(fields)} WHERE staff_no = %s",
             params,
         )
         conn.commit()
@@ -147,7 +157,8 @@ def update_agent(
 def delete_agent(staff_no: str) -> None:
     conn = _get_conn()
     try:
-        cur = conn.execute("DELETE FROM agents WHERE staff_no = ?", (staff_no.strip(),))
+        cur = conn.cursor()
+        cur.execute("DELETE FROM agents WHERE staff_no = %s", (staff_no.strip(),))
         conn.commit()
         if cur.rowcount == 0:
             raise ValueError("Agent not found")
@@ -172,15 +183,17 @@ def list_absences(*, from_date: str | None = None, to_date: str | None = None) -
         params: list[str] = []
         clauses: list[str] = []
         if from_date:
-            clauses.append("r.absent_date >= ?")
+            clauses.append("r.absent_date >= %s")
             params.append(from_date)
         if to_date:
-            clauses.append("r.absent_date <= ?")
+            clauses.append("r.absent_date <= %s")
             params.append(to_date)
         if clauses:
             query += " WHERE " + " AND ".join(clauses)
         query += " ORDER BY r.absent_date, a.staff_name"
-        return [dict(r) for r in conn.execute(query, params).fetchall()]
+        cur = conn.cursor()
+        cur.execute(query, params)
+        return [dict(r) for r in cur.fetchall()]
     finally:
         conn.close()
 
@@ -194,28 +207,31 @@ def create_absence(*, staff_no: str, absent_date: str, note: str = "") -> dict:
     absence_id = str(uuid4())
     conn = _get_conn()
     try:
-        conn.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
             INSERT INTO roster_absences (absence_id, staff_no, absent_date, note)
-            VALUES (?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s)
             """,
             (absence_id, code, date, note.strip()),
         )
         conn.commit()
-        row = conn.execute(
+        cur.execute(
             """
             SELECT r.absence_id, r.staff_no, a.staff_name, r.absent_date, r.note, r.created_at
             FROM roster_absences r
             JOIN agents a ON a.staff_no = r.staff_no
-            WHERE r.absence_id = ?
+            WHERE r.absence_id = %s
             """,
             (absence_id,),
-        ).fetchone()
+        )
+        row = cur.fetchone()
         if not row:
             raise ValueError("Failed to create absence")
         return dict(row)
-    except sqlite3.IntegrityError as exc:
-        if "unique" in str(exc).lower():
+    except psycopg2.IntegrityError as exc:
+        conn.rollback()
+        if is_unique_violation(exc):
             raise ValueError("Absence already recorded for this agent and date") from exc
         raise ValueError("Failed to create absence") from exc
     finally:
@@ -225,8 +241,9 @@ def create_absence(*, staff_no: str, absent_date: str, note: str = "") -> dict:
 def delete_absence(absence_id: str) -> None:
     conn = _get_conn()
     try:
-        cur = conn.execute(
-            "DELETE FROM roster_absences WHERE absence_id = ?",
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM roster_absences WHERE absence_id = %s",
             (absence_id,),
         )
         conn.commit()
@@ -242,26 +259,24 @@ def agents_by_staff_no() -> dict[str, dict]:
 
 
 def list_roster(*, active_only: bool = True, from_date: str | None = None, to_date: str | None = None) -> list[dict]:
-    """Agents with absent_dates for schedule UI and capacity checks.
-
-    When from_date/to_date are set, only absences in that window are attached
-    (still returns all agents; absent_dates may be a subset).
-    """
+    """Agents with absent_dates for schedule UI and capacity checks."""
     agents = list_agents(active_only=active_only)
     if not from_date and not to_date:
         return agents
 
     conn = _get_conn()
     try:
-        query = "SELECT staff_no, absent_date FROM roster_absences WHERE 1=1"
+        query = "SELECT staff_no, absent_date FROM roster_absences WHERE TRUE"
         params: list[str] = []
         if from_date:
-            query += " AND absent_date >= ?"
+            query += " AND absent_date >= %s"
             params.append(from_date)
         if to_date:
-            query += " AND absent_date <= ?"
+            query += " AND absent_date <= %s"
             params.append(to_date)
-        rows = conn.execute(query, params).fetchall()
+        cur = conn.cursor()
+        cur.execute(query, params)
+        rows = cur.fetchall()
         by_staff: dict[str, list[str]] = {}
         for row in rows:
             by_staff.setdefault(row["staff_no"], []).append(row["absent_date"])

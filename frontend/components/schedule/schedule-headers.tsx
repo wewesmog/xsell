@@ -7,7 +7,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { SCHEDULE_STEPS } from "@/lib/schedule/constants"
 import type { ScheduleStepId } from "@/lib/schedule/types"
 
-export function SchedulePageHeader({
+export function SchedulePageIntro() {
+  return (
+    <div className="mb-4">
+      <p className="text-brand-blue mb-1 text-xs font-semibold tracking-widest uppercase">
+        x-sell · Broadcasts
+      </p>
+      <h1 className="text-brand-blue text-3xl font-bold tracking-tight sm:text-4xl">
+        Schedule broadcast
+      </h1>
+      <p className="text-muted-foreground mt-2 max-w-2xl text-base leading-relaxed">
+        Upload leads, rank and assign fairly, then generate agent workbooks for each campaign
+        day.
+      </p>
+    </div>
+  )
+}
+
+export function ScheduleWizardNav({
   currentStep,
   icon: Icon,
   onBack,
@@ -28,67 +45,97 @@ export function SchedulePageHeader({
   const isLastStep = currentStep >= SCHEDULE_STEPS.length - 1
 
   return (
-    <header className="flex flex-col gap-4 border-b border-border/60 pb-6 lg:flex-row lg:items-start lg:justify-between">
-      <div>
-        <p className="text-brand-blue mb-1 text-xs font-semibold tracking-widest uppercase">
-          x-sell · Campaign
-        </p>
-        <h1 className="text-brand-blue text-3xl font-bold tracking-tight sm:text-4xl">
-          Schedule campaign
-        </h1>
-        <p className="text-muted-foreground mt-2 max-w-2xl text-base leading-relaxed">
-          Upload leads, rank and assign fairly, then generate agent workbooks for each campaign
-          day.
-        </p>
-      </div>
-      <div className="flex w-full flex-col gap-3 sm:w-auto lg:min-w-[340px] lg:items-end">
-        <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-stretch">
-          <div className="border-brand-blue/20 bg-brand-blue/[0.04] flex flex-1 items-center gap-3 rounded-xl border px-4 py-3 shadow-sm">
-            <span className="bg-primary text-primary-foreground flex size-11 shrink-0 items-center justify-center rounded-lg shadow-sm">
-              <Icon className="size-5" strokeWidth={2} />
-            </span>
-            <div className="min-w-0">
-              <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
-                Step {currentStep + 1} of {SCHEDULE_STEPS.length}
-              </p>
-              <p className="text-lg font-semibold leading-tight">{step.title}</p>
-              <p className="text-muted-foreground text-xs leading-snug">{step.description}</p>
-            </div>
-          </div>
-          <div className="flex shrink-0 gap-2 sm:flex-col sm:justify-center">
-            <Button
-              type="button"
-              variant="outline"
-              className="min-w-[88px] flex-1 sm:flex-none"
-              onClick={onBack}
-              disabled={!canGoBack}
-            >
-              Back
-            </Button>
-            {showContinue && !isLastStep && onContinue ? (
-              <Button
-                type="button"
-                className="min-w-[88px] flex-1 sm:flex-none"
-                onClick={onContinue}
-              >
-                Continue
-              </Button>
-            ) : null}
+    <div className="sticky top-14 z-20 -mx-4 mb-6 border-b border-border/60 bg-background/95 px-4 py-3 shadow-sm backdrop-blur-sm supports-[backdrop-filter]:bg-background/85 md:-mx-6 md:px-6 lg:mx-0 lg:rounded-lg lg:border lg:px-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="border-brand-blue/20 bg-brand-blue/[0.04] flex min-w-0 flex-1 items-center gap-3 rounded-xl border px-4 py-2.5 shadow-sm sm:max-w-md">
+          <span className="bg-primary text-primary-foreground flex size-10 shrink-0 items-center justify-center rounded-lg shadow-sm">
+            <Icon className="size-5" strokeWidth={2} />
+          </span>
+          <div className="min-w-0">
+            <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
+              Step {currentStep + 1} of {SCHEDULE_STEPS.length}
+            </p>
+            <p className="truncate text-base font-semibold leading-tight">{step.title}</p>
+            <p className="text-muted-foreground truncate text-xs leading-snug">
+              {step.description}
+            </p>
           </div>
         </div>
-        {onClearDraft ? (
+
+        <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
           <Button
             type="button"
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground h-8 self-end text-xs"
-            onClick={onClearDraft}
+            variant="outline"
+            className="min-w-[88px]"
+            onClick={onBack}
+            disabled={!canGoBack}
           >
-            Start over
+            Back
           </Button>
-        ) : null}
+          {showContinue && !isLastStep && onContinue ? (
+            <Button type="button" className="min-w-[88px]" onClick={onContinue}>
+              Continue
+            </Button>
+          ) : null}
+          {onClearDraft ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hidden h-9 text-xs sm:inline-flex"
+              onClick={onClearDraft}
+            >
+              Start over
+            </Button>
+          ) : null}
+        </div>
       </div>
-    </header>
+      {onClearDraft ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground mt-2 h-8 self-end text-xs sm:hidden"
+          onClick={onClearDraft}
+        >
+          Start over
+        </Button>
+      ) : null}
+    </div>
+  )
+}
+
+/** @deprecated Use SchedulePageIntro + ScheduleWizardNav */
+export function SchedulePageHeader({
+  currentStep,
+  icon,
+  onBack,
+  onContinue,
+  onClearDraft,
+  canGoBack,
+  showContinue,
+}: {
+  currentStep: number
+  icon: LucideIcon
+  onBack: () => void
+  onContinue?: () => void
+  onClearDraft?: () => void
+  canGoBack?: boolean
+  showContinue?: boolean
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <SchedulePageIntro />
+      <ScheduleWizardNav
+        currentStep={currentStep}
+        icon={icon}
+        onBack={onBack}
+        onContinue={onContinue}
+        onClearDraft={onClearDraft}
+        canGoBack={canGoBack}
+        showContinue={showContinue}
+      />
+    </div>
   )
 }
 

@@ -1,5 +1,9 @@
 """Pydantic models for agents and roster API."""
 
+from __future__ import annotations
+
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -8,8 +12,8 @@ class AgentSummary(BaseModel):
     staff_name: str
     active: bool = True
     absent_dates: list[str] = Field(default_factory=list)
-    created_at: str = ""
-    updated_at: str = ""
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class AgentCollectionResponse(BaseModel):
@@ -33,7 +37,7 @@ class RosterAbsence(BaseModel):
     staff_name: str = ""
     absent_date: str
     note: str = ""
-    created_at: str = ""
+    created_at: datetime | None = None
 
 
 class RosterCollectionResponse(BaseModel):
@@ -49,7 +53,7 @@ class CreateAbsenceRequest(BaseModel):
 class GenerateBroadcastResponse(BaseModel):
     broadcast_id: str
     output_dir: str
-    generated_at: str
+    generated_at: datetime
     files_written: list[str]
     rows_assigned: int
     agent_day_slots: int

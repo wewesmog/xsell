@@ -123,8 +123,8 @@ export default function CampaignsViewPage() {
           ) : (
             campaigns.map((campaign) => (
               <div key={campaign.campaign_id} className="rounded-lg border border-border/80 bg-muted/20 p-4 shadow-sm">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-medium">{campaign.campaign_name}</p>
+                <p className="text-sm font-medium text-foreground">{campaign.campaign_name}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
                   <StatusBadge status={campaign.status} />
                   <Badge variant="outline">{campaign.broadcast_count} broadcast(s)</Badge>
                 </div>

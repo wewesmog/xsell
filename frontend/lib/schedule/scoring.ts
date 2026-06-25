@@ -36,7 +36,7 @@ export function computeRankingPreview(
   draft: CampaignDraft,
   limit = 20
 ): RankedPreviewRow[] {
-  if (rows.length === 0) return []
+  if (rows.length === 0 || !draft.ranking.enabled) return []
 
   const { ranking, leads } = draft
   const msisdnCol = leads.msisdnColumn

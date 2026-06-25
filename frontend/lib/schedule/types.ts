@@ -19,13 +19,6 @@ export type ScheduleStepId =
   | "schedule"
   | "review"
 
-export type MockAgent = {
-  staffNo: string
-  staffName: string
-  active: boolean
-  absentDates: string[]
-}
-
 export type StoredDraft = {
   savedAt: string
   currentStep: number

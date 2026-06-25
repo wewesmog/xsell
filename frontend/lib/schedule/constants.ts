@@ -9,7 +9,7 @@ export const SCHEDULE_STEPS: {
 }[] = [
   { id: "campaign", title: "Campaign", description: "Campaign & broadcast details" },
   { id: "leads", title: "Leads", description: "Select list & exclusions" },
-  { id: "rank", title: "Rank", description: "Score & order the pool" },
+  { id: "rank", title: "Rank", description: "Optional score & order" },
   { id: "assign", title: "Assign", description: "How leads are shared" },
   { id: "agents", title: "Agents", description: "Select roster for run" },
   { id: "volume", title: "Volume", description: "Daily lead quota" },

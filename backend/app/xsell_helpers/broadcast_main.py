@@ -1,11 +1,15 @@
 """Broadcast (schedule run) CRUD — config holds full wizard draft for later generate_files."""
 
+from __future__ import annotations
+
 import json
+from typing import Any
 from uuid import uuid4
 
-import sqlite3
+import psycopg2
 
-from app.xsell_helpers.canon_main import _get_conn
+from app.shared_services.db import get_xsell_connection as _get_conn
+from app.shared_services.db import is_unique_violation, is_undefined_table
 
 
 def _resolve_schedule_dates(schedule: dict) -> list[str]:
@@ -32,18 +36,22 @@ def _extract_from_config(config: dict) -> tuple[str | None, int, list[str]]:
     return list_id, pool_size, dates
 
 
-def _row_to_broadcast(row: sqlite3.Row, *, include_config: bool = False) -> dict:
-    data = dict(row)
-    dates_raw = data.get("schedule_dates") or "[]"
+def _parse_json_field(value: Any, default: Any) -> Any:
+    if value is None:
+        return default
+    if isinstance(value, (dict, list)):
+        return value
     try:
-        data["schedule_dates"] = json.loads(dates_raw)
-    except json.JSONDecodeError:
-        data["schedule_dates"] = []
+        return json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return default
+
+
+def _row_to_broadcast(row: dict, *, include_config: bool = False) -> dict:
+    data = dict(row)
+    data["schedule_dates"] = _parse_json_field(data.get("schedule_dates"), [])
     if include_config:
-        try:
-            data["config_json"] = json.loads(data.get("config_json") or "{}")
-        except json.JSONDecodeError:
-            data["config_json"] = {}
+        data["config_json"] = _parse_json_field(data.get("config_json"), {})
     else:
         data.pop("config_json", None)
     return data
@@ -66,19 +74,21 @@ def create_broadcast(
     broadcast_id = str(uuid4())
     conn = _get_conn()
     try:
-        parent = conn.execute(
-            "SELECT campaign_id FROM campaigns WHERE campaign_id = ?",
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT campaign_id FROM campaigns WHERE campaign_id = %s",
             (campaign_id,),
-        ).fetchone()
+        )
+        parent = cur.fetchone()
         if not parent:
             raise ValueError("Campaign not found")
 
-        conn.execute(
+        cur.execute(
             """
             INSERT INTO broadcasts (
                 broadcast_id, campaign_id, broadcast_name, lead_list_id,
                 pool_size, schedule_dates, config_json, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 broadcast_id,
@@ -92,20 +102,22 @@ def create_broadcast(
             ),
         )
         conn.commit()
-        row = conn.execute(
+        cur.execute(
             """
             SELECT b.*, c.campaign_name
             FROM broadcasts b
             JOIN campaigns c ON c.campaign_id = b.campaign_id
-            WHERE b.broadcast_id = ?
+            WHERE b.broadcast_id = %s
             """,
             (broadcast_id,),
-        ).fetchone()
+        )
+        row = cur.fetchone()
         if not row:
             raise ValueError("Failed to create broadcast")
         return _row_to_broadcast(row, include_config=True)
-    except sqlite3.IntegrityError as exc:
-        if "idx_broadcasts_campaign_name" in str(exc).lower() or "unique" in str(exc).lower():
+    except psycopg2.IntegrityError as exc:
+        conn.rollback()
+        if is_unique_violation(exc):
             raise ValueError("Broadcast name already exists for this campaign") from exc
         raise ValueError("Failed to create broadcast") from exc
     finally:
@@ -115,29 +127,31 @@ def create_broadcast(
 def list_broadcasts(*, campaign_id: str | None = None) -> list[dict]:
     conn = _get_conn()
     try:
+        cur = conn.cursor()
         if campaign_id:
-            rows = conn.execute(
+            cur.execute(
                 """
                 SELECT b.*, c.campaign_name
                 FROM broadcasts b
                 JOIN campaigns c ON c.campaign_id = b.campaign_id
-                WHERE b.campaign_id = ?
+                WHERE b.campaign_id = %s
                 ORDER BY b.created_at DESC
                 """,
                 (campaign_id,),
-            ).fetchall()
+            )
         else:
-            rows = conn.execute(
+            cur.execute(
                 """
                 SELECT b.*, c.campaign_name
                 FROM broadcasts b
                 JOIN campaigns c ON c.campaign_id = b.campaign_id
                 ORDER BY b.created_at DESC
                 """
-            ).fetchall()
+            )
+        rows = cur.fetchall()
         return [_row_to_broadcast(r) for r in rows]
-    except sqlite3.OperationalError as exc:
-        if "no such table" in str(exc).lower():
+    except psycopg2.Error as exc:
+        if is_undefined_table(exc):
             raise ValueError(
                 "Broadcasts table not found. Run: python scripts/apply_migration.py"
             ) from exc
@@ -149,15 +163,17 @@ def list_broadcasts(*, campaign_id: str | None = None) -> list[dict]:
 def get_broadcast(broadcast_id: str) -> dict | None:
     conn = _get_conn()
     try:
-        row = conn.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
             SELECT b.*, c.campaign_name
             FROM broadcasts b
             JOIN campaigns c ON c.campaign_id = b.campaign_id
-            WHERE b.broadcast_id = ?
+            WHERE b.broadcast_id = %s
             """,
             (broadcast_id,),
-        ).fetchone()
+        )
+        row = cur.fetchone()
         return _row_to_broadcast(row, include_config=True) if row else None
     finally:
         conn.close()
@@ -182,27 +198,27 @@ def update_broadcast(
         name = broadcast_name.strip()
         if not name:
             raise ValueError("Broadcast name is required")
-        fields.append("broadcast_name = ?")
+        fields.append("broadcast_name = %s")
         params.append(name)
 
     if campaign_id is not None:
-        fields.append("campaign_id = ?")
+        fields.append("campaign_id = %s")
         params.append(campaign_id)
 
     if status is not None:
         if status not in ("active", "inactive"):
             raise ValueError("Status must be active or inactive")
-        fields.append("status = ?")
+        fields.append("status = %s")
         params.append(status)
 
     if config_json is not None:
         list_id, pool_size, dates = _extract_from_config(config_json)
         fields.extend(
             [
-                "config_json = ?",
-                "lead_list_id = ?",
-                "pool_size = ?",
-                "schedule_dates = ?",
+                "config_json = %s",
+                "lead_list_id = %s",
+                "pool_size = %s",
+                "schedule_dates = %s",
             ]
         )
         params.extend(
@@ -215,8 +231,9 @@ def update_broadcast(
     params.append(broadcast_id)
     conn = _get_conn()
     try:
-        conn.execute(
-            f"UPDATE broadcasts SET {', '.join(fields)} WHERE broadcast_id = ?",
+        cur = conn.cursor()
+        cur.execute(
+            f"UPDATE broadcasts SET {', '.join(fields)} WHERE broadcast_id = %s",
             params,
         )
         conn.commit()
@@ -224,8 +241,9 @@ def update_broadcast(
         if not updated:
             raise ValueError("Failed to update broadcast")
         return updated
-    except sqlite3.IntegrityError as exc:
-        if "unique" in str(exc).lower():
+    except psycopg2.IntegrityError as exc:
+        conn.rollback()
+        if is_unique_violation(exc):
             raise ValueError("Broadcast name already exists for this campaign") from exc
         raise
     finally:
@@ -235,8 +253,9 @@ def update_broadcast(
 def delete_broadcast(broadcast_id: str) -> None:
     conn = _get_conn()
     try:
-        cur = conn.execute(
-            "DELETE FROM broadcasts WHERE broadcast_id = ?",
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM broadcasts WHERE broadcast_id = %s",
             (broadcast_id,),
         )
         conn.commit()
@@ -250,17 +269,20 @@ def _unique_copy_name(campaign_id: str, base_name: str) -> str:
     candidate = f"{base_name}_copy"
     conn = _get_conn()
     try:
+        cur = conn.cursor()
         n = 2
-        while conn.execute(
-            """
-            SELECT 1 FROM broadcasts
-            WHERE campaign_id = ? AND broadcast_name = ? COLLATE NOCASE
-            """,
-            (campaign_id, candidate),
-        ).fetchone():
+        while True:
+            cur.execute(
+                """
+                SELECT 1 FROM broadcasts
+                WHERE campaign_id = %s AND LOWER(broadcast_name) = LOWER(%s)
+                """,
+                (campaign_id, candidate),
+            )
+            if not cur.fetchone():
+                return candidate
             candidate = f"{base_name}_copy{n}"
             n += 1
-        return candidate
     finally:
         conn.close()
 

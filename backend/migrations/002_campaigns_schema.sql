@@ -1,6 +1,4 @@
 -- Campaigns (parent container for broadcasts / schedule runs)
--- Run after 001_list_ingestion_schema.sql:
---   python scripts/apply_migration.py
 
 CREATE TABLE IF NOT EXISTS campaigns (
   campaign_id    TEXT PRIMARY KEY,
@@ -9,20 +7,23 @@ CREATE TABLE IF NOT EXISTS campaigns (
   status         TEXT NOT NULL DEFAULT 'active'
                  CHECK (status IN ('active', 'inactive')),
   created_by     TEXT NOT NULL DEFAULT 'frontend-user',
-  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_campaigns_name
-  ON campaigns (campaign_name COLLATE NOCASE);
-
+CREATE UNIQUE INDEX IF NOT EXISTS idx_campaigns_name ON campaigns (LOWER(campaign_name));
 CREATE INDEX IF NOT EXISTS idx_campaigns_created_at ON campaigns (created_at);
 
-CREATE TRIGGER IF NOT EXISTS trg_campaigns_updated_at
-AFTER UPDATE ON campaigns
-FOR EACH ROW
+CREATE OR REPLACE FUNCTION xsell_touch_campaigns_updated_at()
+RETURNS TRIGGER AS $$
 BEGIN
-  UPDATE campaigns
-  SET updated_at = datetime('now')
-  WHERE campaign_id = OLD.campaign_id;
+  NEW.updated_at = NOW();
+  RETURN NEW;
 END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_campaigns_updated_at ON campaigns;
+CREATE TRIGGER trg_campaigns_updated_at
+  BEFORE UPDATE ON campaigns
+  FOR EACH ROW
+  EXECUTE PROCEDURE xsell_touch_campaigns_updated_at();

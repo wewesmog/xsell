@@ -26,7 +26,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { PlusIcon, Trash2Icon } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { BarChart3Icon, PlusIcon, Trash2Icon } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { fetchListColumns } from "@/lib/lists/api"
 
 export function RankStep() {
@@ -36,6 +38,7 @@ export function RankStep() {
   const rows = watch("leads.previewRows")
   const renames = watch("leads.columnRenames")
   const criteria = watch("ranking.criteria")
+  const rankingEnabled = watch("ranking.enabled")
   const compulsoryLabels = COMPULSORY_FIELDS.map((f) => f.displayLabel)
   const displayLabels = [
     ...new Set(renames.filter((r) => r.includeInExport).map((r) => r.displayLabel)),
@@ -119,6 +122,70 @@ export function RankStep() {
 
   return (
     <div className="grid gap-6">
+      <Controller
+        name="ranking.enabled"
+        control={control}
+        render={({ field }) => (
+          <Card
+            className={cn(
+              "card-accent overflow-hidden border-2 transition-colors",
+              field.value
+                ? "border-primary/50 bg-primary/[0.07] shadow-md"
+                : "border-border/80 bg-muted/20"
+            )}
+          >
+            <CardContent className="p-0">
+              <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-start gap-4">
+                  <span
+                    className={cn(
+                      "flex size-14 shrink-0 items-center justify-center rounded-xl border shadow-sm transition-colors",
+                      field.value
+                        ? "border-primary/30 bg-primary text-primary-foreground"
+                        : "border-border bg-background text-muted-foreground"
+                    )}
+                  >
+                    <BarChart3Icon className="size-7" strokeWidth={2} />
+                  </span>
+                  <div className="min-w-0 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-lg font-semibold tracking-tight">
+                        Enable weighted ranking
+                      </p>
+                      <Badge variant={field.value ? "default" : "secondary"} className="text-xs">
+                        {field.value ? "On" : "Off"}
+                      </Badge>
+                    </div>
+                    <p className="text-muted-foreground text-sm leading-relaxed">
+                      {field.value
+                        ? "Score leads with weighted numeric fields before assignment."
+                        : "Optional — leave off to keep ingest order and use random assignment."}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center justify-end gap-3 border-t border-border/50 pt-4 sm:border-t-0 sm:pt-0">
+                  <span className="text-muted-foreground text-sm font-medium sm:hidden">
+                    {field.value ? "Ranking on" : "Ranking off"}
+                  </span>
+                  <Switch
+                    checked={field.value}
+                    className="h-7 w-12 data-[size=default]:h-7 data-[size=default]:w-12 [&_[data-slot=switch-thumb]]:size-6 [&_[data-slot=switch-thumb]]:data-checked:translate-x-[calc(100%-4px)]"
+                    onCheckedChange={(checked) => {
+                      field.onChange(checked)
+                      if (!checked) {
+                        setValue("assignment.mode", "random")
+                        setValue("assignment.fairnessColumn", "")
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      />
+
+      {rankingEnabled ? (
       <Card>
         <CardHeader className={SCHEDULE_SECTION_HEADER_CLASS}>
           <CardTitle className={SCHEDULE_SECTION_TITLE_CLASS}>Weighted ranking</CardTitle>
@@ -274,6 +341,7 @@ export function RankStep() {
           )}
         </CardContent>
       </Card>
+      ) : null}
 
       <Card>
         <CardHeader className={SCHEDULE_SECTION_HEADER_CLASS}>
@@ -314,6 +382,7 @@ export function RankStep() {
               </ScrollArea>
             )}
           />
+          {rankingEnabled ? (
           <Controller
             name="ranking.includeManagerColumns"
             control={control}
@@ -324,6 +393,7 @@ export function RankStep() {
               </div>
             )}
           />
+          ) : null}
         </CardContent>
       </Card>
 

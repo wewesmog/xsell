@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 
 from app.models.list_ingestion_models import (
