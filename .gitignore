@@ -1,0 +1,18 @@
+# Databases
+*.db
+*.sqlite3
+
+# Environments / Secrets
+.env
+.env.local
+.env.development.local
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Node.js dependencies (already ignored in frontend, but safe for root)
+node_modules/
+.next/
