@@ -1,0 +1,1 @@
+{"msisdnColumn": "MOBILE_NO", "nameColumn": "FULL_NAME", "columnRenames": [{"sourceHeader": "FULL_NAME", "displayLabel": "Customer Name", "includeInExport": true}, {"sourceHeader": "MOBILE_NO", "displayLabel": "Mobile Number", "includeInExport": true}, {"sourceHeader": "CREDITLIMIT", "displayLabel": "Loan Limit", "includeInExport": true}]}
